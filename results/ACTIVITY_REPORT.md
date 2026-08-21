@@ -150,6 +150,7 @@ epoch بیستم با Accuracy برابر 84.333 درصد تمام شد. افت 
 | Weak-augmentation fine-tune | 87.586% | 93.162% | تکمیل |
 | Ensemble | **87.769%** | **93.225%** | بهترین فعلی |
 | FastTeacher100Hz | 86.257% | 92.184% | تکمیل؛ ضعیف‌تر از ensemble |
+| Official XResNet1D101 | 85.158% | 91.165% | تکمیل با early stopping؛ ضعیف‌تر از ensemble |
 
 ## 8. فایل‌های خروجی مهم
 
@@ -159,6 +160,7 @@ epoch بیستم با Accuracy برابر 84.333 درصد تمام شد. افت 
 - گزارش ensemble: `C:\ptbxl\results\teacher_optimization\fast_ensemble\report.json`
 - Teacher سریع: `C:\ptbxl\results\teacher_fast_100hz\teacher_fast_best.pt`
 - گزارش Teacher سریع: `C:\ptbxl\results\teacher_fast_100hz\report.json`
+- گزارش XResNet رسمی: `C:\ptbxl\results\teacher_official_xresnet101\report.json`
 - گزارش توسعه قبلی: `C:\ptbxl\results\TEACHER_DEVELOPMENT_LOG.md/.json`
 
 ## 9. تفسیر علمی نتایج
@@ -186,3 +188,26 @@ AUC حدود 93 درصد نشان می‌دهد Teacher اصلی رتبه‌بن
 ## 12. جمع‌بندی
 
 پروژه از Teacher اولیه 87.357 درصد به بهترین Validation Accuracy برابر 87.769 درصد رسید. این افزایش با TTA، fine-tune و ensemble حاصل شد، اما هدف 90 درصد هنوز محقق نشده است. آزمایش سریع 100Hz نشان داد کاهش محاسبات لزوماً به دقت بهتر منجر نمی‌شود. ادامه منطقی، استفاده از backbone رسمی و قوی‌تر PTB-XL است؛ Test همچنان مهروموم باقی می‌ماند تا اعتبار روش‌شناسی حفظ شود.
+
+## 13. اجرای Official XResNet1D101
+
+برای آزمودن پیشنهاد backbone رسمی، معماری `xresnet1d101` با خروجی دودویی و همان تعریف برچسب و split قبلی اجرا شد. آموزش برای حداکثر 20 epoch برنامه‌ریزی شده بود و پس از شش epoch بدون بهبود، در پایان epoch 13 به‌طور سالم با early stopping خاتمه یافت.
+
+| مشخصه | مقدار |
+|---|---:|
+| بهترین epoch | 7 |
+| Accuracy | 85.158% |
+| Sensitivity | 73.529% |
+| Specificity | 90.419% |
+| F1 | 75.529% |
+| AUC | 91.165% |
+| Threshold | 0.494 |
+| ماتریس اغتشاش | TP=500، FN=180، TN=1359، FP=144 |
+
+epoch 13 با Accuracy برابر 84.563 درصد و AUC برابر 90.988 درصد پایان یافت. کاهش loss آموزش همراه با عدم بهبود پایدار Validation نشانه اشباع/بیش‌برازش بود. بنابراین checkpoint epoch 7 نگه داشته شد، هدف 90 درصد محقق نشد و ensemble قبلی همچنان بهترین انتخاب است. مجموعه Test در این اجرا نیز دست‌نخورده ماند.
+
+## 14. زیرساخت GitHub و اثبات GPU رانر محلی
+
+مخزن عمومی پروژه فقط شامل کد، مستندات و نتایج سبک است؛ دیتاست، checkpoint، محیط مجازی و فایل‌های رانر از Git مستثنا هستند. رانر self-hosted ویندوز با برچسب `ptbxl-local` ثبت شده و workflowهای آن عمداً فقط با اجرای دستی فعال می‌شوند تا pull request عمومی نتواند روی لپ‌تاپ کد اجرا کند.
+
+فایل `runner_gpu_probe.py` یک بار کاری محدود CUDA اجرا می‌کند، نام GPU و نسخه CUDA/PyTorch، تعداد ضرب ماتریسی، زمان اجرا، checksum و شناسه‌های GitHub را در JSON ثبت می‌کند. workflow با نام `GPU Runner Proof` خلاصه نتیجه را در صفحه Action نشان می‌دهد و JSON را به‌عنوان artifact نگه می‌دارد. نتیجه اجرای واقعی GitHub پس از اجرای workflow در همین گزارش ثبت خواهد شد.

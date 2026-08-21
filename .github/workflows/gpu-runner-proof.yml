@@ -1,0 +1,32 @@
+name: GPU Runner Proof
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prove-local-gpu:
+    runs-on: [self-hosted, Windows, X64, ptbxl-local]
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run bounded NVIDIA workload
+        id: gpu
+        shell: powershell
+        run: |
+          $python = 'C:\Python\Python312\python.exe'
+          if (-not (Test-Path -LiteralPath $python)) { throw "Python 3.12 not found at $python" }
+          & $python runner_gpu_probe.py --duration 15 --output artifacts/gpu_runner_probe.json
+          if ($LASTEXITCODE -ne 0) { throw "GPU proof failed" }
+
+      - name: Upload machine-readable proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpu-runner-proof
+          path: artifacts/gpu_runner_probe.json
+          if-no-files-found: error
+          retention-days: 30

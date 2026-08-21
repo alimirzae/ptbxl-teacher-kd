@@ -92,3 +92,16 @@
 ## تصمیم بعدی
 
 شاخه Teacher سریع تکمیل و متوقف شد، زیرا از Teacher/ensemble قبلی عبور نکرد. مسیر بعدی باید یک backbone ازپیش‌آموزش‌دیده ECG یا مدل چندمقیاسی قوی‌تر باشد. نتیجه Test فقط یک‌بار و پس از قفل‌شدن مدل و threshold محاسبه خواهد شد.
+
+## نتیجه Official XResNet1D101
+
+- آموزش تا epoch 13 ادامه یافت و با early stopping سالم خاتمه پیدا کرد.
+- بهترین epoch برابر 7 بود: Accuracy=85.158، Sensitivity=73.529، Specificity=90.419، F1=75.529 و AUC=91.165 درصد در threshold=0.494.
+- ماتریس اغتشاش بهترین epoch: TP=500، FN=180، TN=1359 و FP=144.
+- هدف 90 درصد حاصل نشد؛ بهترین نتیجه کلی همچنان ensemble با Accuracy=87.769 درصد است.
+- Test ارزیابی نشده و انتخاب مدل همچنان فقط بر اساس Validation است.
+- خروجی: `C:\ptbxl\results\teacher_official_xresnet101`.
+
+## زیرساخت اجرای راه دور
+
+رانر محلی GitHub روی Windows و NVIDIA ثبت و آنلاین است. workflow آزمون GPU فقط به‌صورت دستی اجرا می‌شود، یک workload محدود CUDA می‌سازد، خلاصه را در GitHub Actions و نتیجه کامل را در artifact JSON منتشر می‌کند. این محدودیت دستی برای جلوگیری از اجرای کد pull requestهای عمومی روی لپ‌تاپ ضروری است.
