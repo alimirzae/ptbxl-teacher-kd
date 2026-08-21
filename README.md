@@ -24,9 +24,10 @@ This repository intentionally contains **no PTB-XL signals, metadata tables, che
 6. `09_fast_teacher_ensemble.py` — validation-only ensemble search.
 7. `10_train_fast_teacher_100hz.py` — lightweight 100 Hz teacher experiment.
 8. `11_train_official_xresnet.py` — adapted official PTB-XL XResNet1D101 experiment.
-9. `04_train_student.py` — baseline/KD student training after teacher selection.
-10. `05_evaluate_and_export.py` — one-time final test evaluation and exports.
-11. `06_build_research_bundle.py` — aggregate research outputs.
+9. `13_train_multiscale_staged.py` — time-budgeted, resumable multi-scale 500 Hz Teacher experiment for the self-hosted runner.
+10. `04_train_student.py` — baseline/KD student training after teacher selection.
+11. `05_evaluate_and_export.py` — one-time final test evaluation and exports.
+12. `06_build_research_bundle.py` — aggregate research outputs.
 
 ## Windows setup
 
@@ -36,19 +37,20 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\run_pipeline.ps1
 ```
 
-Long-running training scripts write resumable checkpoints approximately every five minutes. Generated artifacts belong in `results/` and model checkpoints are excluded from Git.
+Long-running training scripts write resumable checkpoints locally. Generated artifacts belong in `results/` and model checkpoints are excluded from Git.
 
 ## Current validation status
 
-The best completed configuration at the time of publication is the original/fine-tuned ensemble with validation Accuracy **87.769%** and AUC **93.225%**. The official XResNet1D101 adaptation is the current experiment. Fold 10 has not been evaluated.
+The best completed configuration remains the original/fine-tuned ensemble with validation Accuracy **87.769%** and AUC **93.225%**. FastTeacher100Hz and the from-scratch Official XResNet1D101 experiment did not beat that benchmark. The current experiment is the staged `MultiScaleTeacher500Hz`, which must pass a smoke run before full validation-only training. Fold 10 has not been evaluated.
 
-See `results/ACTIVITY_REPORT.md` for the execution history, operational issues, decisions, and detailed tables.
+The staged runner workflow is `Staged Multiscale Teacher`. It is manual-only, uses a 10-minute GitHub Actions job with a shorter internal compute budget, persists local training/validation state, and publishes only lightweight progress files. See `doc/MULTISCALE_STAGED_RUNBOOK.md` and `results/CURRENT_STAGE.json`.
+
+See `results/ACTIVITY_REPORT.md` and `results/TEACHER_DEVELOPMENT_LOG.md` for execution history and completed Teacher results.
 
 ## Self-hosted runner safety
 
-The included workflow is manual-only and targets the label `ptbxl-local`. Do not add `pull_request` triggers to a public repository: untrusted workflow code must never execute on a personal laptop. The runner directory and credentials are ignored by Git.
+The included workflows are manual-only and target the label `ptbxl-local`. Do not add `pull_request` triggers to a public repository: untrusted workflow code must never execute on a personal laptop. The runner directory and credentials are ignored by Git.
 
 ## Third-party source
 
 The adapted XResNet implementation under `external/official_ptbxl_models/` originates from the public PTB-XL benchmarking repository by Strodthoff et al. See `THIRD_PARTY_NOTICES.md` and the upstream license before redistribution or modification.
-
