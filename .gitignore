@@ -35,7 +35,7 @@ __pycache__/
 *.log
 
 # Local GitHub Actions runner (never commit)
-actions-runner/
+actions-runner*/
 .runner
 .credentials
 .credentials_rsaparams
@@ -50,4 +50,3 @@ Thumbs.db
 
 # Incomplete external clone; selected attributed source files are kept separately
 external/ecg_ptbxl_benchmarking/
-

@@ -21,5 +21,22 @@
     {"epoch": 5, "mean_loss": 0.3031, "accuracy": 85.2955, "auc": 92.0117},
     {"epoch": 6, "mean_loss": 0.2909, "accuracy": 83.5089, "auc": 90.7112}
   ],
+  "infrastructure_validation": {
+    "status": "passed",
+    "repository": "https://github.com/alimirzae/ptbxl-teacher-kd",
+    "workflow": "GPU Runner Proof",
+    "run_id": 32453602059,
+    "run_url": "https://github.com/alimirzae/ptbxl-teacher-kd/actions/runs/32453602059",
+    "commit": "a403ead083616fbfb724d314fed5b32dd2877130",
+    "runner": "LAPTOP-ptbxl-2",
+    "gpu": "Quadro P1000",
+    "cuda": "12.1",
+    "torch": "2.3.1+cu121",
+    "iterations": 10081,
+    "elapsed_seconds": 16.688408900001377,
+    "job_duration_seconds": 59,
+    "security": "manual workflow_dispatch only",
+    "evidence_file": "results/GPU_RUNNER_PROOF.json"
+  },
   "current_decision": "Official XResNet1D101 also completed below the existing ensemble. Keep test sealed; the ensemble at 87.7691% remains the best validation result."
 }

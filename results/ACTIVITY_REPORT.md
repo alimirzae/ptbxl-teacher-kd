@@ -210,4 +210,8 @@ epoch 13 با Accuracy برابر 84.563 درصد و AUC برابر 90.988 در�
 
 مخزن عمومی پروژه فقط شامل کد، مستندات و نتایج سبک است؛ دیتاست، checkpoint، محیط مجازی و فایل‌های رانر از Git مستثنا هستند. رانر self-hosted ویندوز با برچسب `ptbxl-local` ثبت شده و workflowهای آن عمداً فقط با اجرای دستی فعال می‌شوند تا pull request عمومی نتواند روی لپ‌تاپ کد اجرا کند.
 
-فایل `runner_gpu_probe.py` یک بار کاری محدود CUDA اجرا می‌کند، نام GPU و نسخه CUDA/PyTorch، تعداد ضرب ماتریسی، زمان اجرا، checksum و شناسه‌های GitHub را در JSON ثبت می‌کند. workflow با نام `GPU Runner Proof` خلاصه نتیجه را در صفحه Action نشان می‌دهد و JSON را به‌عنوان artifact نگه می‌دارد. نتیجه اجرای واقعی GitHub پس از اجرای workflow در همین گزارش ثبت خواهد شد.
+فایل `runner_gpu_probe.py` یک بار کاری محدود CUDA اجرا می‌کند، نام GPU و نسخه CUDA/PyTorch، تعداد ضرب ماتریسی، زمان اجرا، checksum و شناسه‌های GitHub را در JSON ثبت می‌کند. workflow با نام `GPU Runner Proof` خلاصه و JSON کامل را در log صفحه Action نشان می‌دهد و نسخه ماشین‌خوان آن در `results/GPU_RUNNER_PROOF.json` بایگانی می‌شود.
+
+اجرای end-to-end شماره `32453602059` روی commit `a403ead` موفق شد: GitHub کد را checkout کرد، رانر `LAPTOP-ptbxl-2` کارت `Quadro P1000` را با PyTorch 2.3.1 و CUDA 12.1 فعال کرد، 10,081 ضرب ماتریس 1024×1024 را در 16.688 ثانیه انجام داد و JSON را اعتبارسنجی کرد. تمام مراحل job در 59 ثانیه سبز شدند. پیوند عمومی: `https://github.com/alimirzae/ptbxl-teacher-kd/actions/runs/32453602059`.
+
+در اجرای نخست، مرحله محاسبات GPU موفق بود اما `upload-artifact@v4` به‌علت مشکل شبکه در انتقال فایل 894 بایتی متوقف ماند و session رانر را busy نگه داشت. job به‌صورت force-cancel خاتمه یافت، یک ثبت runner مستقل ساخته شد و workflow طوری اصلاح شد که JSON را مستقیماً در log/summary منتشر و در مخزن بایگانی کند. ثبت قدیمی حذف شد و تنها رانر سالم آنلاین باقی ماند. این رخداد نشان داد مسیر رفت و اجرای GPU صحیح است و وابستگی artifact در شبکه فعلی قابل اتکا نیست.

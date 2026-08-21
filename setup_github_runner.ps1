@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory=$true)][string]$Repository,
     [string]$RunnerName = "$env:COMPUTERNAME-ptbxl",
-    [string]$RunnerDirectory = "C:\ptbxl\actions-runner"
+    [string]$RunnerDirectory = "C:\ptbxl\actions-runner2"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -11,8 +11,8 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
 }
 
 $repo = gh repo view $Repository --json nameWithOwner,url | ConvertFrom-Json
-$download = gh api "repos/$($repo.nameWithOwner)/actions/runners/downloads" |
-    ConvertFrom-Json |
+$downloads = gh api "repos/$($repo.nameWithOwner)/actions/runners/downloads" | ConvertFrom-Json
+$download = $downloads |
     Where-Object { $_.os -eq 'win' -and $_.architecture -eq 'x64' } |
     Select-Object -First 1
 if (-not $download) {
