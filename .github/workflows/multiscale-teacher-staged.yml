@@ -64,9 +64,15 @@ jobs:
           $resultName = if ($mode -eq 'smoke') { 'teacher_multiscale_staged_smoke' } else { 'teacher_multiscale_staged' }
           $source = "C:\ptbxl\results\$resultName"
           $dest = Join-Path $env:GITHUB_WORKSPACE "results\$resultName"
-          New-Item -ItemType Directory -Force -Path $dest | Out-Null
-
           $names = @('stage_status.json','history.csv','report.json')
+
+          Set-Location $env:GITHUB_WORKSPACE
+          git config user.name 'ptbxl-runner'
+          git config user.email 'ptbxl-runner@users.noreply.github.com'
+          git pull --rebase origin main
+          if ($LASTEXITCODE -ne 0) { Write-Warning 'Could not rebase onto latest main; results remain in the job log and local result directory.'; exit 0 }
+
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
           foreach ($name in $names) {
             $src = Join-Path $source $name
             if (Test-Path -LiteralPath $src) {
@@ -87,12 +93,6 @@ jobs:
             Get-Content -LiteralPath $history
           }
 
-          Set-Location $env:GITHUB_WORKSPACE
-          git config user.name 'ptbxl-runner'
-          git config user.email 'ptbxl-runner@users.noreply.github.com'
-          git pull --rebase origin main
-          if ($LASTEXITCODE -ne 0) { Write-Warning 'Could not rebase lightweight results onto latest main.'; exit 0 }
-
           $tracked = @()
           foreach ($name in $names) {
             $path = "results/$resultName/$name"
@@ -100,7 +100,9 @@ jobs:
           }
           if ($tracked.Count -eq 0) { Write-Warning 'No lightweight result files to commit.'; exit 0 }
           git add -- $tracked
-          if (-not (git diff --cached --quiet)) {
+          git diff --cached --quiet
+          $hasDiff = ($LASTEXITCODE -ne 0)
+          if ($hasDiff) {
             git commit -m "Record multiscale $mode stage $env:GITHUB_RUN_ID"
             if ($LASTEXITCODE -ne 0) { Write-Warning 'Result commit failed.'; exit 0 }
             git push origin HEAD:main
