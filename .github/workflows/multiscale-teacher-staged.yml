@@ -57,7 +57,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Staged run failed with exit code $LASTEXITCODE" }
 
       - name: Print and publish lightweight progress
-        if: always()
+        if: success()
         shell: powershell
         run: |
           $mode = '${{ inputs.mode }}'
@@ -82,6 +82,12 @@ jobs:
 
           $status = Join-Path $dest 'stage_status.json'
           if (Test-Path -LiteralPath $status) {
+            $statusJson = Get-Content -LiteralPath $status -Raw | ConvertFrom-Json
+            $statusJson | Add-Member -NotePropertyName github_run_id -NotePropertyValue $env:GITHUB_RUN_ID -Force
+            $statusJson | Add-Member -NotePropertyName github_sha -NotePropertyValue $env:GITHUB_SHA -Force
+            $statusJson | Add-Member -NotePropertyName runner_name -NotePropertyValue $env:RUNNER_NAME -Force
+            $statusJson | Add-Member -NotePropertyName github_action_url -NotePropertyValue "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID" -Force
+            $statusJson | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $status -Encoding UTF8
             Write-Host '=== STAGE STATUS ==='
             Get-Content -LiteralPath $status
           } else {
