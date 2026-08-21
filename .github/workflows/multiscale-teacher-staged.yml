@@ -1,0 +1,113 @@
+name: Staged Multiscale Teacher
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "smoke first; train only after smoke passes"
+        required: true
+        default: smoke
+        type: choice
+        options:
+          - smoke
+          - train
+      max_seconds:
+        description: "Compute budget inside the 10-minute job (60-480)"
+        required: true
+        default: "420"
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ptbxl-multiscale-teacher-staged
+  cancel-in-progress: false
+
+jobs:
+  run-stage:
+    runs-on: [self-hosted, Windows, X64, ptbxl-local]
+    timeout-minutes: 10
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Validate local prerequisites
+        shell: powershell
+        run: |
+          $python = 'C:\Python\Python312\python.exe'
+          if (-not (Test-Path -LiteralPath $python)) { throw "Python not found at $python" }
+          if (-not (Test-Path -LiteralPath 'C:\ptbxl\project\data\splits\train.csv')) { throw 'train.csv missing' }
+          if (-not (Test-Path -LiteralPath 'C:\ptbxl\project\data\splits\val.csv')) { throw 'val.csv missing' }
+          & $python -m py_compile "$env:GITHUB_WORKSPACE\13_train_multiscale_staged.py"
+          if ($LASTEXITCODE -ne 0) { throw 'Python syntax check failed' }
+          & $python -c "import torch; assert torch.cuda.is_available(); print(torch.cuda.get_device_name(0))"
+          if ($LASTEXITCODE -ne 0) { throw 'CUDA prerequisite failed' }
+
+      - name: Run bounded resumable stage
+        shell: powershell
+        run: |
+          $python = 'C:\Python\Python312\python.exe'
+          $mode = '${{ inputs.mode }}'
+          $maxSeconds = [int]'${{ inputs.max_seconds }}'
+          if ($maxSeconds -lt 60 -or $maxSeconds -gt 480) { throw 'max_seconds must be 60..480' }
+          & $python "$env:GITHUB_WORKSPACE\13_train_multiscale_staged.py" --mode $mode --max-seconds $maxSeconds
+          if ($LASTEXITCODE -ne 0) { throw "Staged run failed with exit code $LASTEXITCODE" }
+
+      - name: Print and publish lightweight progress
+        if: always()
+        shell: powershell
+        run: |
+          $mode = '${{ inputs.mode }}'
+          $resultName = if ($mode -eq 'smoke') { 'teacher_multiscale_staged_smoke' } else { 'teacher_multiscale_staged' }
+          $source = "C:\ptbxl\results\$resultName"
+          $dest = Join-Path $env:GITHUB_WORKSPACE "results\$resultName"
+          $names = @('stage_status.json','history.csv','report.json')
+
+          Set-Location $env:GITHUB_WORKSPACE
+          git config user.name 'ptbxl-runner'
+          git config user.email 'ptbxl-runner@users.noreply.github.com'
+          git pull --rebase origin main
+          if ($LASTEXITCODE -ne 0) { Write-Warning 'Could not rebase onto latest main; results remain in the job log and local result directory.'; exit 0 }
+
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          foreach ($name in $names) {
+            $src = Join-Path $source $name
+            if (Test-Path -LiteralPath $src) {
+              Copy-Item -LiteralPath $src -Destination (Join-Path $dest $name) -Force
+            }
+          }
+
+          $status = Join-Path $dest 'stage_status.json'
+          if (Test-Path -LiteralPath $status) {
+            Write-Host '=== STAGE STATUS ==='
+            Get-Content -LiteralPath $status
+          } else {
+            Write-Warning 'No stage_status.json was produced.'
+          }
+          $history = Join-Path $dest 'history.csv'
+          if (Test-Path -LiteralPath $history) {
+            Write-Host '=== VALIDATION HISTORY ==='
+            Get-Content -LiteralPath $history
+          }
+
+          $tracked = @()
+          foreach ($name in $names) {
+            $path = "results/$resultName/$name"
+            if (Test-Path -LiteralPath (Join-Path $env:GITHUB_WORKSPACE $path)) { $tracked += $path }
+          }
+          if ($tracked.Count -eq 0) { Write-Warning 'No lightweight result files to commit.'; exit 0 }
+          git add -- $tracked
+          git diff --cached --quiet
+          $hasDiff = ($LASTEXITCODE -ne 0)
+          if ($hasDiff) {
+            git commit -m "Record multiscale $mode stage $env:GITHUB_RUN_ID"
+            if ($LASTEXITCODE -ne 0) { Write-Warning 'Result commit failed.'; exit 0 }
+            git push origin HEAD:main
+            if ($LASTEXITCODE -ne 0) { Write-Warning 'Result push failed; result remains visible in this job log.'; exit 0 }
+            Write-Host 'Lightweight stage result committed to main.'
+          } else {
+            Write-Host 'No new lightweight result changes to commit.'
+          }
