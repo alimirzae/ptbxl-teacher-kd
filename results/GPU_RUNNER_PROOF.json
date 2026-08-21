@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "started_at_utc": "2026-08-21T06:09:54.748787+00:00",
+  "host": "Laptop",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python": "3.12.0",
+  "torch": "2.3.1+cu121",
+  "cuda_available": true,
+  "requested_duration_seconds": 15.0,
+  "matrix_size": 1024,
+  "github": {
+    "repository": "alimirzae/ptbxl-teacher-kd",
+    "run_id": "32453250900",
+    "run_attempt": "1",
+    "sha": "956ac0e2ada354f1b03a3309d663f60fc679c833",
+    "runner_name": "LAPTOP-ptbxl"
+  },
+  "gpu_name": "Quadro P1000",
+  "cuda_runtime": "12.1",
+  "compute_capability": "6.1",
+  "gpu_memory_bytes": 4294836224,
+  "status": "passed",
+  "iterations": 10057,
+  "elapsed_seconds": 16.68142760000046,
+  "estimated_tflops": 1.2946879347385951,
+  "result_checksum": 49.09375,
+  "max_memory_allocated_bytes": 16908288,
+  "finished_at_utc": "2026-08-21T06:10:11.676602+00:00",
+  "note": "The CUDA step passed. The first workflow was canceled because upload-artifact stalled; proof remained visible in the GitHub log and was archived here."
+}

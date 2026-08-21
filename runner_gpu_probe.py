@@ -112,7 +112,7 @@ def main() -> int:
     append_line(summary, f"- CUDA / PyTorch: `{result.get('cuda_runtime', 'n/a')}` / `{result['torch']}`")
     append_line(summary, f"- Workload: `{result.get('iterations', 0)}` multiplications of {args.matrix_size}x{args.matrix_size}")
     append_line(summary, f"- Elapsed: `{result.get('elapsed_seconds', 0):.3f}` seconds")
-    append_line(summary, "- Full machine-readable evidence is attached as the `gpu-runner-proof` artifact.")
+    append_line(summary, "- Full machine-readable evidence is printed in the job log and archived under `results/` in the repository.")
     return 0 if status == "passed" else 1
 
 

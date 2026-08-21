@@ -23,10 +23,10 @@ jobs:
           & $python runner_gpu_probe.py --duration 15 --output artifacts/gpu_runner_probe.json
           if ($LASTEXITCODE -ne 0) { throw "GPU proof failed" }
 
-      - name: Upload machine-readable proof
-        uses: actions/upload-artifact@v4
-        with:
-          name: gpu-runner-proof
-          path: artifacts/gpu_runner_probe.json
-          if-no-files-found: error
-          retention-days: 30
+      - name: Validate machine-readable proof
+        shell: powershell
+        run: |
+          $proof = Get-Content artifacts/gpu_runner_probe.json -Raw | ConvertFrom-Json
+          if ($proof.status -ne 'passed') { throw "GPU proof JSON did not report success" }
+          Write-Host 'Machine-readable GPU proof:'
+          Get-Content artifacts/gpu_runner_probe.json
