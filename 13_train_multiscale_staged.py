@@ -212,6 +212,8 @@ def main():
     ap.add_argument("--smoke-train-limit", type=int, default=80)
     ap.add_argument("--smoke-val-limit", type=int, default=80)
     args = ap.parse_args()
+    if args.mode == "smoke":
+        args.epochs = 1
 
     if args.max_seconds < 60 or args.max_seconds > 480:
         raise ValueError("--max-seconds must be between 60 and 480 to preserve runner timeout margin")
