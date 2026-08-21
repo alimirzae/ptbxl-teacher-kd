@@ -15,7 +15,15 @@ $download = gh api "repos/$($repo.nameWithOwner)/actions/runners/downloads" |
     ConvertFrom-Json |
     Where-Object { $_.os -eq 'win' -and $_.architecture -eq 'x64' } |
     Select-Object -First 1
-if (-not $download) { throw 'No Windows x64 Actions runner package was returned by GitHub.' }
+if (-not $download) {
+    $asset = gh api 'repos/actions/runner/releases/latest' |
+        ConvertFrom-Json |
+        Select-Object -ExpandProperty assets |
+        Where-Object { $_.name -match '^actions-runner-win-x64-.*\.zip$' } |
+        Select-Object -First 1
+    if (-not $asset) { throw 'No official Windows x64 Actions runner package was found.' }
+    $download = [pscustomobject]@{ filename = $asset.name; download_url = $asset.browser_download_url }
+}
 
 New-Item -ItemType Directory -Path $RunnerDirectory -Force | Out-Null
 $archive = Join-Path $env:TEMP "actions-runner-$($download.filename)"
@@ -32,4 +40,3 @@ try {
 } finally {
     Pop-Location
 }
-
