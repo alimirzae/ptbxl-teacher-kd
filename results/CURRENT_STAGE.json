@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-08-21",
+  "project_phase": "teacher_development",
+  "current_experiment": "teacher_multiscale_staged",
+  "status": "ready_for_smoke",
+  "workflow": "Staged Multiscale Teacher",
+  "script": "13_train_multiscale_staged.py",
+  "runner_label": "ptbxl-local",
+  "job_timeout_minutes": 10,
+  "default_compute_budget_seconds": 420,
+  "locked_validation_benchmark": {
+    "name": "original_finetuned_ensemble",
+    "accuracy": 87.7691,
+    "auc": 93.2248
+  },
+  "execution_order": [
+    "smoke",
+    "repeat_train_stages_until_stop_condition",
+    "lock_teacher_and_threshold",
+    "train_two_lead_student_with_kd",
+    "evaluate_fold_10_once_after_lock"
+  ],
+  "stop_conditions": {
+    "target_validation_accuracy": 90.0,
+    "early_stopping_min_epoch": 10,
+    "early_stopping_stale_epochs": 7,
+    "max_epochs": 24
+  },
+  "test_evaluated": false,
+  "fold_10_sealed": true,
+  "notes": "Training and validation are time-budgeted and resumable. Checkpoints and validation probability arrays remain local; only lightweight status/history/report files may be committed."
+}
