@@ -1,0 +1,21 @@
+{
+  "scope": "validation_only",
+  "test_evaluated": false,
+  "target_accuracy": 90.0,
+  "target_reached": false,
+  "best": {
+    "name": "original_tta_4+finetuned_tta_4",
+    "blend_weight_finetuned": 0.9,
+    "threshold": 0.6250000000000006,
+    "accuracy": 87.76912505726065,
+    "sensitivity": 77.5,
+    "specificity": 92.41516966067864,
+    "f1": 79.78803936411809,
+    "auc": 93.22482486008376,
+    "tp": 527,
+    "fn": 153,
+    "tn": 1389,
+    "fp": 114
+  },
+  "evaluated_candidates": 389
+}

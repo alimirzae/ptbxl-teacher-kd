@@ -1,0 +1,14 @@
+{
+  "stage": "teacher_weak_aug_finetune",
+  "epoch": 5,
+  "epochs": 5,
+  "batch": 545,
+  "batches_per_epoch": 545,
+  "epoch_percent": 100.0,
+  "overall_percent": 100.0,
+  "running_loss": 0.2966284809582824,
+  "best_validation_accuracy": 87.58589097572148,
+  "checkpoint": "C:\\ptbxl\\results\\teacher_optimization\\finetune_weak_aug\\training_latest.pt",
+  "saved_at_unix": 1787285021.736346,
+  "test_evaluated": false
+}

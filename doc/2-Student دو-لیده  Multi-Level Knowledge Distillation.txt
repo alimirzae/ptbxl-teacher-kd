@@ -1,0 +1,329 @@
+# ═══════════════════════════════════════════════════════════════
+# Cell S1: STUDENT (2-lead II+aVF) + MULTI-LEVEL KD FROM TEACHER
+# سطوح KD: (1) Logit KD  (2) Feature KD  +  Hard CE Loss
+# ═══════════════════════════════════════════════════════════════
+import subprocess, sys
+try: import wfdb
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "wfdb", "tqdm"])
+    import wfdb
+
+import os, torch, torch.nn as nn, torch.nn.functional as F, torch.optim as optim, shutil
+import pandas as pd, numpy as np, random
+from pathlib import Path
+from torch.utils.data import Dataset, DataLoader
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+
+SEED = 42
+torch.manual_seed(SEED); np.random.seed(SEED); random.seed(SEED)
+torch.backends.cudnn.benchmark = True
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+if device.type == 'cpu': raise RuntimeError("❌ GPU required!")
+print(f"✅ GPU: {torch.cuda.get_device_name(0)}")
+
+# ─── Drive + splits ───────────────────────────────────────────
+if not os.path.exists('/content/drive/MyDrive'):
+    from google.colab import drive; drive.mount('/content/drive')
+os.system("ls /content/drive/MyDrive/ECG_MI_Project/data/splits/ >/dev/null 2>&1")
+
+PROJECT = Path("/content/drive/MyDrive/ECG_MI_Project")
+PTBXL   = PROJECT / "data" / "ptbxl"
+SD      = PROJECT / "data" / "splits"
+local   = Path("/content/splits"); local.mkdir(exist_ok=True)
+for n in ["train.csv","val.csv","test.csv"]:
+    if (SD/n).exists(): shutil.copy(SD/n, local/n)
+if not (local/"train.csv").exists():
+    print("⚠️ لطفاً train/val/test.csv را آپلود کنید:")
+    from google.colab import files
+    for name, data in files.upload().items(): (local/name).write_bytes(data)
+
+CKPT_T = PROJECT/"checkpoints"/"teacher"/"teacher_mi_binary_best.pt"
+STU_DIR = PROJECT/"checkpoints"/"student"; STU_DIR.mkdir(parents=True, exist_ok=True)
+CKPT_S = STU_DIR/"student_mi_kd_best.pt"
+FIG = PROJECT/"figures"; FIG.mkdir(parents=True, exist_ok=True)
+
+POSITIVE_IDS = [0]
+STUDENT_LEADS = [1, 5]   # Lead II + aVF (برای گجت پوشیدنی IoT)
+print(f"🎯 Student leads: II (idx 1) + aVF (idx 5)")
+
+# ─── AMP سازگار ───────────────────────────────────────────────
+try:
+    scaler = torch.amp.GradScaler('cuda')
+    def autocast(): return torch.amp.autocast('cuda')
+except Exception:
+    scaler = torch.cuda.amp.GradScaler()
+    def autocast(): return torch.cuda.amp.autocast()
+
+# ═══════════════════════════════════════════════════════════════
+# Dataset (برمی‌گرداند ۱۲ لید؛ Student فقط ۲ لید را برمی‌دارد)
+# ═══════════════════════════════════════════════════════════════
+class BinaryECGDataset(Dataset):
+    def __init__(self, csv, root, augment=False):
+        df = pd.read_csv(csv)
+        if 'class_id' in df.columns: df = df.dropna(subset=['class_id'])
+        self.root = Path(root)
+        v = [i for i,r in df.iterrows()
+             if (self.root/r['filename_hr']).with_suffix('.dat').exists()
+             or (self.root/r['filename_hr']).with_suffix('.hea').exists()]
+        self.df = df.iloc[v].reset_index(drop=True)
+        self.augment = augment
+        print(f"   ✅ {len(self.df)} records (augment={augment})")
+    def __len__(self): return len(self.df)
+    def _augment(self, sig):
+        if np.random.rand() < 0.6:
+            snr = np.random.uniform(15,30); p = np.mean(sig**2)+1e-8
+            sig = sig + np.random.normal(0, np.sqrt(p/(10**(snr/10))), sig.shape)
+        if np.random.rand() < 0.5:
+            t = np.arange(sig.shape[0])/500.0
+            sig = sig + (np.random.uniform(0.05,0.25)*np.sin(2*np.pi*np.random.uniform(0.1,0.6)*t))[:,None]
+        if np.random.rand() < 0.5: sig = sig * np.random.uniform(0.8,1.2)
+        if np.random.rand() < 0.5: sig = np.roll(sig, np.random.randint(-500,500), axis=0)
+        return sig
+    def __getitem__(self, i):
+        r = self.df.iloc[i]
+        try: sig,_ = wfdb.rdsamp(str(self.root/r['filename_hr']))
+        except Exception: sig = np.zeros((5000,12))
+        if self.augment: sig = self._augment(sig)
+        sig = (sig - sig.mean(0)) / (sig.std(0) + 1e-8)
+        y = 1 if int(r['class_id']) in POSITIVE_IDS else 0
+        return (torch.tensor(sig, dtype=torch.float32).permute(1,0).contiguous(),
+                torch.tensor(y, dtype=torch.long))
+
+# ═══════════════════════════════════════════════════════════════
+# Teacher (بارگذاری از Checkpoint)
+# ═══════════════════════════════════════════════════════════════
+class SE(nn.Module):
+    def __init__(self, c, r=8):
+        super().__init__()
+        self.fc = nn.Sequential(nn.AdaptiveAvgPool1d(1), nn.Flatten(),
+                                nn.Linear(c, max(1,c//r)), nn.ReLU(),
+                                nn.Linear(max(1,c//r), c), nn.Sigmoid())
+    def forward(self, x): return x * self.fc(x).unsqueeze(-1)
+
+class ResBlock(nn.Module):
+    def __init__(self, cin, cout, k=7, stride=1):
+        super().__init__()
+        self.c1 = nn.Conv1d(cin, cout, k, stride=stride, padding=k//2)
+        self.b1 = nn.BatchNorm1d(cout)
+        self.c2 = nn.Conv1d(cout, cout, k, padding=k//2)
+        self.b2 = nn.BatchNorm1d(cout)
+        self.se = SE(cout)
+        self.short = nn.Sequential(nn.Conv1d(cin, cout, 1, stride=stride), nn.BatchNorm1d(cout)) \
+                     if (cin != cout or stride != 1) else nn.Identity()
+    def forward(self, x):
+        r = self.short(x)
+        x = F.relu(self.b1(self.c1(x)))
+        x = self.se(self.b2(self.c2(x)))
+        return F.relu(x + r)
+
+class TeacherBinary(nn.Module):
+    def __init__(self, num_classes=2):
+        super().__init__()
+        self.stem = nn.Sequential(nn.Conv1d(12, 64, 15, stride=2, padding=7),
+                                  nn.BatchNorm1d(64), nn.ReLU())
+        self.layer1 = nn.Sequential(ResBlock(64,128,stride=2), ResBlock(128,128))
+        self.layer2 = nn.Sequential(ResBlock(128,256,stride=2), ResBlock(256,256))
+        self.layer3 = nn.Sequential(ResBlock(256,512,stride=2), ResBlock(512,512))
+        self.pool = nn.AdaptiveAvgPool1d(50)
+        e = nn.TransformerEncoderLayer(d_model=512, nhead=8, dim_feedforward=1024,
+                                       dropout=0.2, batch_first=True)
+        self.transformer = nn.TransformerEncoder(e, num_layers=2)
+        self.classifier = nn.Sequential(nn.Linear(512*50, 512), nn.GELU(),
+                                        nn.Dropout(0.4), nn.Linear(512, num_classes))
+    def forward(self, x):
+        x = self.stem(x); x = self.layer1(x); x = self.layer2(x); x = self.layer3(x)
+        x = self.pool(x).permute(0,2,1)
+        x = self.transformer(x).reshape(x.size(0), -1)
+        return self.classifier(x)
+
+def teacher_feat(model, x):
+    """برمی‌گرداند (logits, features) برای KD چندسطحی"""
+    x = model.stem(x); x = model.layer1(x); x = model.layer2(x); x = model.layer3(x)
+    f = model.pool(x)
+    h = f.permute(0,2,1); h = model.transformer(h)
+    return model.classifier(h.reshape(h.size(0), -1)), f
+
+# ═══════════════════════════════════════════════════════════════
+# Student سبک‌وزن (۲ لید — مخصوص IoT)
+# ═══════════════════════════════════════════════════════════════
+class StudentLite(nn.Module):
+    def __init__(self, num_classes=2, in_ch=2):
+        super().__init__()
+        self.c1 = nn.Conv1d(in_ch, 32, 7, stride=2, padding=3)
+        self.b1 = nn.BatchNorm1d(32)
+        self.c2 = nn.Conv1d(32, 64, 9, stride=2, padding=4)
+        self.b2 = nn.BatchNorm1d(64)
+        self.c3 = nn.Conv1d(64, 128, 11, stride=2, padding=5)
+        self.b3 = nn.BatchNorm1d(128)
+        self.pool = nn.AdaptiveAvgPool1d(50)
+        e = nn.TransformerEncoderLayer(d_model=128, nhead=4, dim_feedforward=256,
+                                       dropout=0.1, batch_first=True)
+        self.transformer = nn.TransformerEncoder(e, num_layers=2)
+        self.feat_proj = nn.Conv1d(128, 512, 1)   # هم‌راستاسازی با Teacher (Feature KD)
+        self.classifier = nn.Sequential(nn.Linear(128, 128), nn.GELU(),
+                                        nn.Dropout(0.3), nn.Linear(128, num_classes))
+    def forward(self, x):
+        x = F.relu(self.b1(self.c1(x)))
+        x = F.relu(self.b2(self.c2(x)))
+        x = F.relu(self.b3(self.c3(x)))
+        f = self.pool(x)                          # (B,128,50)
+        h = f.permute(0,2,1)
+        h = self.transformer(h).mean(dim=1)
+        return self.classifier(h), self.feat_proj(f)
+
+# ─── بارگذاری Teacher آموزش‌دیده ─────────────────────────────
+print("\n📦 Loading trained Teacher...")
+teacher = TeacherBinary(2).to(device)
+ckpt_t = torch.load(CKPT_T, map_location=device)
+teacher.load_state_dict(ckpt_t['model_state_dict'])
+teacher.eval()
+for p in teacher.parameters(): p.requires_grad_(False)
+nT = sum(p.numel() for p in teacher.parameters())
+
+student = StudentLite(2).to(device)
+nS = sum(p.numel() for p in student.parameters())
+print(f"🏫 Teacher: {nT:,} params | 🎓 Student: {nS:,} params | 🗜️ Ratio: {nT/nS:.1f}x")
+
+# ─── DataLoaderها ─────────────────────────────────────────────
+print("\n📦 Loading datasets...")
+train_loader = DataLoader(BinaryECGDataset(local/"train.csv", PTBXL, augment=True),
+                          batch_size=32, shuffle=True, num_workers=2, pin_memory=True)
+val_loader   = DataLoader(BinaryECGDataset(local/"val.csv",   PTBXL),
+                          batch_size=64, shuffle=False, num_workers=2, pin_memory=True)
+test_loader  = DataLoader(BinaryECGDataset(local/"test.csv",  PTBXL),
+                          batch_size=64, shuffle=False, num_workers=2, pin_memory=True)
+
+tr = pd.read_csv(local/"train.csv")
+n_pos = int(tr['class_id'].isin(POSITIVE_IDS).sum()); n_neg = len(tr) - n_pos
+class_weight = torch.tensor([len(tr)/(2*n_neg), len(tr)/(2*n_pos)], dtype=torch.float32).to(device)
+
+# ─── پارامترهای KD ────────────────────────────────────────────
+T_TEMP, ALPHA, BETA = 2.0, 0.7, 0.3   # دما | وزن Logit KD | وزن Feature KD
+USE_KD = True                         # False = Student بدون KD (برای Ablation)
+
+optimizer = optim.AdamW(student.parameters(), lr=3e-4, weight_decay=1e-4)
+EPOCHS, WARMUP, PATIENCE = 15, 1, 5
+def lr_lambda(e):
+    if e < WARMUP: return (e+1)/WARMUP
+    p = (e-WARMUP)/max(1, EPOCHS-WARMUP)
+    return max(0.05, 0.5*(1+np.cos(np.pi*p)))
+scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+# ─── ارزیابی Student ──────────────────────────────────────────
+def evaluate(loader, threshold=0.5):
+    student.eval()
+    P, T = [], []
+    with torch.no_grad():
+        for x, y in loader:
+            x = x.to(device)
+            with autocast():
+                s_log, _ = student(x[:, STUDENT_LEADS])
+            P.append(torch.softmax(s_log, 1)[:, 1].cpu().numpy()); T.append(y.numpy())
+    P, T = np.concatenate(P), np.concatenate(T)
+    pred = (P >= threshold).astype(int)
+    acc  = 100*(pred == T).mean()
+    tp = ((pred==1)&(T==1)).sum(); fn = ((pred==0)&(T==1)).sum()
+    tn = ((pred==0)&(T==0)).sum(); fp = ((pred==1)&(T==0)).sum()
+    sens = 100*tp/max(1,tp+fn); spec = 100*tn/max(1,tn+fp)
+    f1 = 100*2*tp/max(1,2*tp+fp+fn)
+    try:
+        from sklearn.metrics import roc_auc_score; auc = 100*roc_auc_score(T, P)
+    except Exception: auc = float('nan')
+    return acc, sens, spec, f1, auc, P, T
+
+# ─── حلقه آموزش KD ────────────────────────────────────────────
+best_val_acc, best_state, no_imp = 0.0, None, 0
+hist = {'loss':[], 'val_acc':[]}
+mode = "KD (Logit+Feature)" if USE_KD else "CE only (Baseline)"
+print(f"\n🔥 STUDENT TRAINING — {mode}")
+for ep in range(EPOCHS):
+    student.train(); tl = 0.0
+    for x, y in tqdm(train_loader, desc=f"Ep {ep+1}/{EPOCHS}"):
+        x, y = x.to(device), y.to(device)
+        xs = x[:, STUDENT_LEADS]
+        with torch.no_grad():
+            with autocast():
+                t_log, t_f = teacher_feat(teacher, x)
+        optimizer.zero_grad()
+        with autocast():
+            s_log, s_f = student(xs)
+            loss_hard = F.cross_entropy(s_log, y, weight=class_weight)
+            if USE_KD:
+                loss_soft = (T_TEMP**2) * F.kl_div(F.log_softmax(s_log/T_TEMP, 1),
+                                                   F.softmax(t_log/T_TEMP, 1),
+                                                   reduction='batchmean')
+                loss_feat = F.mse_loss(s_f, t_f)
+                loss = loss_hard + ALPHA*loss_soft + BETA*loss_feat
+            else:
+                loss = loss_hard
+        scaler.scale(loss).backward()
+        scaler.unscale_(optimizer)
+        nn.utils.clip_grad_norm_(student.parameters(), 1.0)
+        scaler.step(optimizer); scaler.update()
+        tl += loss.item()
+    hist['loss'].append(tl/len(train_loader))
+    scheduler.step()
+
+    acc, sens, spec, f1, auc, _, _ = evaluate(val_loader)
+    hist['val_acc'].append(acc)
+    print(f"Epoch {ep+1:2d} | Loss {hist['loss'][-1]:.4f} | Val Acc {acc:.2f}% | "
+          f"Sens {sens:.1f}% | Spec {spec:.1f}% | AUC {auc:.1f}")
+
+    if acc > best_val_acc:
+        best_val_acc = acc
+        best_state = {k: v.clone() for k, v in student.state_dict().items()}
+        no_imp = 0
+        print("   💾 Best student saved!")
+    else:
+        no_imp += 1
+        if no_imp >= PATIENCE: print(f"⏹ Early stop @ {ep+1}"); break
+
+# ─── Threshold روی Val + ارزیابی نهایی Test (یک بار) ──────────
+student.load_state_dict(best_state)
+_, _, _, _, _, P_v, T_v = evaluate(val_loader)
+best_thr, best_a = 0.5, 0.0
+for thr in np.arange(0.20, 0.81, 0.01):
+    a = 100*((P_v >= thr).astype(int) == T_v).mean()
+    if a > best_a: best_a, best_thr = a, thr
+
+sa, ssens, sspec, sf1, sauc, P_t, T_t = evaluate(test_loader, threshold=best_thr)
+
+# ─── مقایسه Teacher vs Student (جدول اصلی مقاله) ─────────────
+ta  = ckpt_t.get('test_acc',  float('nan'))
+ts  = ckpt_t.get('test_sens', float('nan'))
+tsp = ckpt_t.get('test_spec', float('nan'))
+tau = ckpt_t.get('test_auc',  float('nan'))
+
+print("\n" + "="*74)
+print("🏆 FINAL COMPARISON — TEST SET (MI vs Others)")
+print("="*74)
+print(f"{'Model':22s} | {'Acc':>6s} | {'Sens':>6s} | {'Spec':>6s} | {'AUC':>6s} | {'Params':>10s}")
+print(f"{'Teacher (12-lead)':22s} | {ta:5.2f}% | {ts:5.2f}% | {tsp:5.2f}% | {tau:5.1f} | {nT:>10,}")
+print(f"{'Student (2-lead KD)':22s} | {sa:5.2f}% | {ssens:5.2f}% | {sspec:5.2f}% | {sauc:5.1f} | {nS:>10,}")
+print(f"\n🗜️  Compression: {nT/nS:.1f}x smaller | Acc gap: {ta-sa:.2f}%")
+print("="*74)
+
+torch.save({'model_state_dict': best_state, 'threshold': float(best_thr),
+            'val_acc': best_val_acc, 'test_acc': sa, 'test_sens': ssens,
+            'test_spec': sspec, 'test_auc': sauc, 'kd': USE_KD}, CKPT_S)
+print(f"💾 Saved: {CKPT_S}")
+
+# ─── نمودارها ─────────────────────────────────────────────────
+from sklearn.metrics import roc_curve
+fpr, tpr, _ = roc_curve(T_t, P_t)
+fig = plt.figure(figsize=(16,4))
+plt.subplot(1,3,1); plt.plot(hist['loss'],'b-o'); plt.title('Student KD Loss'); plt.grid(alpha=.3)
+plt.subplot(1,3,2); plt.plot(hist['val_acc'],'g-o')
+plt.axhline(ta, color='r', ls='--', alpha=.6, label=f'Teacher {ta:.1f}%')
+plt.title('Student Val Acc'); plt.legend(); plt.grid(alpha=.3)
+plt.subplot(1,3,3); plt.plot(fpr, tpr, 'r-', lw=2)
+plt.title(f'Student Test ROC (AUC={sauc:.1f}%)'); plt.xlabel('FPR'); plt.ylabel('TPR'); plt.grid(alpha=.3)
+plt.tight_layout(); plt.savefig(FIG/"student_kd_final.png", dpi=150, bbox_inches='tight'); plt.show()
+
+if ta - sa <= 3:
+    print("\n🎉 SUCCESS! Student با فقط ۲ لید به دقت نزدیک Teacher رسید —")
+    print("   این یعنی پیش‌بینی حمله قلبی روی گجت پوشیدنی IoT ممکن است!")
+else:
+    print(f"\n📌 Gap {ta-sa:.2f}% — با تنظیم ALPHA/BETA یا اپوک بیشتر بهبود می‌دهیم.")

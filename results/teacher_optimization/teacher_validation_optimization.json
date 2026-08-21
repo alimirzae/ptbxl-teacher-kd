@@ -1,0 +1,134 @@
+{
+  "scope": "validation_only",
+  "test_evaluated": false,
+  "checkpoint": "C:\\ptbxl\\project\\checkpoints\\teacher\\teacher_mi_binary_best.pt",
+  "threshold_step": 0.001,
+  "tta_variants": [
+    0,
+    1,
+    2,
+    4
+  ],
+  "results": {
+    "tta_0": {
+      "best_accuracy": {
+        "threshold": 0.557,
+        "accuracy": 87.31103985341274,
+        "sensitivity": 79.55882352941177,
+        "specificity": 90.81836327345309,
+        "f1": 79.61736571008095,
+        "auc": 93.05491957261948,
+        "tp": 541,
+        "fn": 139,
+        "tn": 1365,
+        "fp": 138
+      },
+      "best_with_sensitivity_at_least_85": {
+        "threshold": 0.373,
+        "accuracy": 85.52450755840586,
+        "sensitivity": 86.47058823529412,
+        "specificity": 85.09647371922821,
+        "f1": 78.82037533512064,
+        "auc": 93.05491957261948,
+        "tp": 588,
+        "fn": 92,
+        "tn": 1279,
+        "fp": 224
+      }
+    },
+    "tta_1": {
+      "best_accuracy": {
+        "threshold": 0.591,
+        "accuracy": 87.44846541456711,
+        "sensitivity": 78.23529411764706,
+        "specificity": 91.61676646706587,
+        "f1": 79.52167414050822,
+        "auc": 93.07169973777934,
+        "tp": 532,
+        "fn": 148,
+        "tn": 1377,
+        "fp": 126
+      },
+      "best_with_sensitivity_at_least_85": {
+        "threshold": 0.373,
+        "accuracy": 85.43289051763628,
+        "sensitivity": 86.17647058823529,
+        "specificity": 85.09647371922821,
+        "f1": 78.65771812080537,
+        "auc": 93.07169973777934,
+        "tp": 586,
+        "fn": 94,
+        "tn": 1279,
+        "fp": 224
+      }
+    },
+    "tta_2": {
+      "best_accuracy": {
+        "threshold": 0.614,
+        "accuracy": 87.44846541456711,
+        "sensitivity": 76.61764705882354,
+        "specificity": 92.34863606121091,
+        "f1": 79.17933130699087,
+        "auc": 93.09508434112168,
+        "tp": 521,
+        "fn": 159,
+        "tn": 1388,
+        "fp": 115
+      },
+      "best_with_sensitivity_at_least_85": {
+        "threshold": 0.381,
+        "accuracy": 85.52450755840586,
+        "sensitivity": 86.17647058823529,
+        "specificity": 85.22954091816368,
+        "f1": 78.76344086021506,
+        "auc": 93.09508434112168,
+        "tp": 586,
+        "fn": 94,
+        "tn": 1281,
+        "fp": 222
+      }
+    },
+    "tta_4": {
+      "best_accuracy": {
+        "threshold": 0.558,
+        "accuracy": 87.44846541456711,
+        "sensitivity": 79.8529411764706,
+        "specificity": 90.88489687292082,
+        "f1": 79.8529411764706,
+        "auc": 93.14283198309263,
+        "tp": 543,
+        "fn": 137,
+        "tn": 1366,
+        "fp": 137
+      },
+      "best_with_sensitivity_at_least_85": {
+        "threshold": 0.395,
+        "accuracy": 85.38708199725149,
+        "sensitivity": 85.1470588235294,
+        "specificity": 85.49567531603459,
+        "f1": 78.40216655382532,
+        "auc": 93.14283198309263,
+        "tp": 579,
+        "fn": 101,
+        "tn": 1285,
+        "fp": 218
+      }
+    }
+  },
+  "best_configuration": {
+    "tta_passes": 1,
+    "selection": "max_accuracy",
+    "threshold": 0.591,
+    "accuracy": 87.44846541456711,
+    "sensitivity": 78.23529411764706,
+    "specificity": 91.61676646706587,
+    "f1": 79.52167414050822,
+    "auc": 93.07169973777934,
+    "tp": 532,
+    "fn": 148,
+    "tn": 1377,
+    "fp": 126
+  },
+  "target_accuracy_percent": 90.0,
+  "target_reached": false
+}

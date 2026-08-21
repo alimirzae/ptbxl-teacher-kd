@@ -1,0 +1,36 @@
+name: Local PTB-XL checks
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-code:
+    runs-on: [self-hosted, Windows, X64, ptbxl-local]
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Verify tracked Python syntax
+        shell: powershell
+        run: |
+          $python = 'C:\Python\Python312\python.exe'
+          if (-not (Test-Path -LiteralPath $python)) { throw "Python 3.12 not found at $python" }
+          $files = Get-ChildItem -LiteralPath $env:GITHUB_WORKSPACE -Filter '*.py' -File
+          foreach ($file in $files) {
+            & $python -m py_compile $file.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Compilation failed: $($file.Name)" }
+          }
+      - name: Confirm data and checkpoint exclusion
+        shell: powershell
+        run: |
+          $forbidden = git ls-files | Where-Object {
+            $_ -match '(^|/)(records100|records500|\.venv|actions-runner)/' -or
+            $_ -match '\.(pt|pth|ckpt|dat|hea|npy|npz)$' -or
+            $_ -match '(^|/)ptbxl_database\.csv$'
+          }
+          if ($forbidden) { throw "Forbidden tracked files:`n$($forbidden -join "`n")" }
+          Write-Host 'Repository hygiene check passed.'
+

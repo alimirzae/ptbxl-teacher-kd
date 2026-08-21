@@ -1,0 +1,9 @@
+{
+  "epoch": 20,
+  "epochs": 20,
+  "batch": 65,
+  "batches": 137,
+  "overall_percent": 97.37226277372264,
+  "best_validation_accuracy": 86.25744388456252,
+  "test_evaluated": false
+}

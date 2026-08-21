@@ -1,0 +1,24 @@
+{
+  "updated_at": "2026-08-21 Asia/Tehran",
+  "task": "MI_OR_ISCHEMIA_vs_OTHERS",
+  "positive_definition": "PTB-XL MI diagnostic class codes plus explicit ISC* ischemia codes",
+  "split_policy": {"train_folds": "1-8", "validation_fold": 9, "test_fold": 10, "patient_disjoint": true},
+  "test_evaluated": false,
+  "target_validation_accuracy_percent": 90.0,
+  "experiments": [
+    {"name": "teacher_500hz_initial", "best_validation_accuracy": 87.3568, "reason_for_next_step": "threshold tuning was insufficient"},
+    {"name": "validation_tta_optimization", "best_validation_accuracy": 87.4485, "reason_for_next_step": "only marginal TTA gain"},
+    {"name": "weak_augmentation_finetune", "best_epoch": 2, "best_validation_accuracy": 87.5859, "best_auc": 93.131, "reason_for_next_step": "validation plateau"},
+    {"name": "fast_ensemble", "configurations": 389, "best_validation_accuracy": 87.7691, "sensitivity": 77.5, "specificity": 92.4152, "f1": 79.788, "auc": 93.2248, "target_reached": false},
+    {"name": "fast_teacher_100hz", "architecture": "1D ResNet-SE with mean/max pooling and age/sex metadata", "status": "completed", "epochs_completed": 20, "best_epoch": 11, "best_validation_accuracy": 86.2574, "best_sensitivity": 71.6176, "best_specificity": 92.8809, "best_f1": 76.4521, "best_auc": 92.1843, "final_epoch_accuracy": 84.3335, "target_reached": false}
+  ],
+  "fast_teacher_history_through_epoch_6": [
+    {"epoch": 1, "mean_loss": 0.4376, "accuracy": 81.9973, "auc": 88.3852},
+    {"epoch": 2, "mean_loss": 0.3520, "accuracy": 83.6464, "auc": 89.2068},
+    {"epoch": 3, "mean_loss": 0.3445, "accuracy": 83.8296, "auc": 89.2768},
+    {"epoch": 4, "mean_loss": 0.3260, "accuracy": 84.7000, "auc": 90.8865},
+    {"epoch": 5, "mean_loss": 0.3031, "accuracy": 85.2955, "auc": 92.0117},
+    {"epoch": 6, "mean_loss": 0.2909, "accuracy": 83.5089, "auc": 90.7112}
+  ],
+  "current_decision": "FastTeacher100Hz completed below the existing ensemble. Keep test sealed and move to a stronger pretrained ECG backbone or multiscale model."
+}

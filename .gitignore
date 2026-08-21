@@ -1,0 +1,53 @@
+# PTB-XL datasets and raw records
+records100/
+records500/
+ptbxl_database.csv
+ptbxl_database.zip
+scp_statements.csv
+RECORDS
+SHA256SUMS.txt
+*.dat
+*.hea
+*.xyz
+
+# Models, checkpoints, generated results and large binaries
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.npy
+*.npz
+results/**/training_latest.*
+results/**/best_validation_probabilities.csv
+results/**/validation_probabilities*.csv
+results/_activity_report_render/
+
+# Local environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+*.tmp
+*.temp
+*.log
+
+# Local GitHub Actions runner (never commit)
+actions-runner/
+.runner
+.credentials
+.credentials_rsaparams
+_diag/
+_work/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Incomplete external clone; selected attributed source files are kept separately
+external/ecg_ptbxl_benchmarking/
+
